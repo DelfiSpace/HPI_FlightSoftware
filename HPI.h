@@ -13,6 +13,7 @@
 #include "CommandHandler.h"
 #include "DelfiPQcore.h"
 #include "PQ9Bus.h"
+#include "RS485.h"
 #include "PQ9Frame.h"
 #include "DWire.h"
 #include "TMP100.h"

@@ -2,7 +2,8 @@
 
 // CDHS bus handler
 PQ9Bus pq9bus(1, GPIO_PORT_P2, GPIO_PIN1);
-//PQ9Bus rs485(3, GPIO_PORT_P9, GPIO_PIN0);
+//RS485 rs485(3, GPIO_PORT_P9, GPIO_PIN0);
+RS485 rs485(3, GPIO_PORT_P10, GPIO_PIN0);
 
 // debug console handler
 DSerial serial;
@@ -18,7 +19,9 @@ MB85RS fram(spi, GPIO_PORT_P1, GPIO_PIN0 );
 
 // services running in the system
 PingService ping;
-ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
+//ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
+// TODO Fix!
+ResetService reset( GPIO_PORT_P5, GPIO_PIN0 );
 
 Service* services[] = { &ping, &reset };
 
@@ -30,10 +33,28 @@ Task* tasks[] = { &cmdHandler, &timerTask };
 // system uptime
 unsigned long uptime = 0;
 
+PQ9Frame pingCmd, bus2On, bus2Off;
+
 // TODO: remove when bug in CCS has been solved
+void validPQ9Cmd(PQ9Frame &newFrame)
+{
+    serial.println();
+    serial.println("Received command:");
+    serial.print("Source: ");
+    serial.print(newFrame.getSource(), DEC);
+    serial.println();
+    serial.print("Payload[0]: ");
+    serial.print(newFrame.getPayload()[0], DEC);
+    serial.println();
+    serial.print("Payload[1]: ");
+    serial.print(newFrame.getPayload()[1], DEC);
+    serial.println();
+    serial.println();
+}
+
 void validCmd(PQ9Frame &newFrame)
 {
-    cmdHandler.received(newFrame);
+    serial.println("Valid command!");
 }
 
 void periodicTask()
@@ -48,34 +69,31 @@ void periodicTask()
     unsigned long storedUptime;
     fram.read(0, (unsigned char *)&storedUptime, sizeof(storedUptime));
 
-    serial.print("Stored uptime: ");
+    /*serial.print("Stored uptime: ");
     serial.print(storedUptime, DEC);
     serial.println();
 
     serial.print("Uptime: ");
     serial.print(uptime, DEC);
-    serial.println();
+    serial.println();*/
 
-    if (uptime >= 15)
+    if ((uptime & 0x0F) == 0)
     {
-        serial.println("try reboot");
-        reset.forceHardReset();
+        pq9bus.transmit(pingCmd);
     }
 
+    if ((uptime & 0x0F) == 2)
+    {
+        pq9bus.transmit(bus2On);
+    }
 
-        PQ9Frame frame;
-        //frame.setDestination(1);
-        //frame.setSource(2);
-        frame.setDestination(2);
-        frame.setSource(1);
-        frame.setPayloadSize(2);
-        frame.getPayload()[0] = 17; // ping
-        frame.getPayload()[1] = 1;    // request
-        //rs485.transmit(frame);
-        //pq9bus.transmit(frame);
+    if ((uptime & 0x0F) == 7)
+    {
+        pq9bus.transmit(bus2Off);
+    }
 
     // collect telemetry
-    serial.print("Temperature: ");
+    /*serial.print("Temperature: ");
     tempSensor.getTemperature(t);
     serial.print(t, DEC);
     serial.println("00 mdegC");
@@ -89,7 +107,7 @@ void periodicTask()
     serial.print("Current: ");
     powerBus.getCurrent(i);
     serial.print(i, DEC);
-    serial.println(" mA");
+    serial.println(" mA");*/
 
     // refresh the watch-dog configuration to make sure that, even in case of internal
     // registers corruption, the watch-dog is capable of recovering from an error
@@ -132,18 +150,17 @@ void main(void)
     fram.init();
 
     serial.begin( );                        // baud rate: 9600 bps
-    pq9bus.begin(115200, 100);    // baud rate: 115200 bps
-                                            // address ?
+    pq9bus.begin(115200, 100);              // baud rate: 115200 bps
+                                            // address 100
+//todo: set 1200
+    rs485.init(1200);                     // baud rate: 9600 bps
 
-    //rs485.begin(115200, 2);    // baud rate: 115200 bps
-                                                // address ?
 
     // link the command handler to the PQ9 bus:
     // every time a new command is received, it will be forwarded to the command handler
     // TODO: put back the lambda function after bug in CCS has been fixed
-    //pq9bus.setReceiveHandler([](PQ9Frame &newFrame){ cmdHandler.received(newFrame); });
-    pq9bus.setReceiveHandler(validCmd);
-    //rs485.setReceiveHandler(validCmd);
+    pq9bus.setReceiveHandler(validPQ9Cmd);
+    rs485.setReceptionHandler(validCmd);
 
     // every time a command is correctly processed, call the watch-dog
     // TODO: put back the lambda function after bug in CCS has been fixed
@@ -151,6 +168,31 @@ void main(void)
     //cmdHandler.onValidCommand(validCmd);
 
     serial.println("HPI booting...");
+
+    // ping request
+    pingCmd.setDestination(2);
+    pingCmd.setSource(100);
+    pingCmd.setPayloadSize(2);
+    pingCmd.getPayload()[0] = 17;
+    pingCmd.getPayload()[1] = 1;
+
+    // bus 2 ON
+    bus2On.setDestination(2);
+    bus2On.setSource(100);
+    bus2On.setPayloadSize(4);
+    bus2On.getPayload()[0] = 1;
+    bus2On.getPayload()[1] = 1;
+    bus2On.getPayload()[2] = 2;
+    bus2On.getPayload()[3] = 1;
+
+    // bus 2 OFF
+    bus2Off.setDestination(2);
+    bus2Off.setSource(100);
+    bus2Off.setPayloadSize(4);
+    bus2Off.getPayload()[0] = 1;
+    bus2Off.getPayload()[1] = 1;
+    bus2Off.getPayload()[2] = 2;
+    bus2Off.getPayload()[3] = 0;
 
     TaskManager::start(tasks, 2);
 }
