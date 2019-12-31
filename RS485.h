@@ -37,6 +37,7 @@ public:
     RS485( uint8_t mod, unsigned long port, unsigned long pin );
     void init( unsigned int baudrate );
     void setReceptionHandler( void (*islHandle)( PQ9Frame & ) );
+    void transmit( PQ9Frame &frame );
 };
 
 #endif /* RS485_H_ */

@@ -1,7 +1,7 @@
 #include "HPI.h"
 
 // CDHS bus handler
-PQ9Bus pq9bus(1, GPIO_PORT_P2, GPIO_PIN1);
+//PQ9Bus pq9bus(1, GPIO_PORT_P2, GPIO_PIN1);
 //RS485 rs485(3, GPIO_PORT_P9, GPIO_PIN0);
 RS485 rs485(3, GPIO_PORT_P10, GPIO_PIN0);
 
@@ -26,9 +26,9 @@ ResetService reset( GPIO_PORT_P5, GPIO_PIN0 );
 Service* services[] = { &ping, &reset };
 
 // COMMS board tasks
-PQ9CommandHandler cmdHandler(pq9bus, services, 2);
+//PQ9CommandHandler cmdHandler(pq9bus, services, 2);
 PeriodicTask timerTask(FCLOCK, periodicTask);
-Task* tasks[] = { &cmdHandler, &timerTask };
+Task* tasks[] = { &timerTask };
 
 // system uptime
 unsigned long uptime = 0;
@@ -38,23 +38,27 @@ PQ9Frame pingCmd, bus2On, bus2Off;
 // TODO: remove when bug in CCS has been solved
 void validPQ9Cmd(PQ9Frame &newFrame)
 {
-    serial.println();
-    serial.println("Received command:");
-    serial.print("Source: ");
-    serial.print(newFrame.getSource(), DEC);
-    serial.println();
-    serial.print("Payload[0]: ");
-    serial.print(newFrame.getPayload()[0], DEC);
-    serial.println();
-    serial.print("Payload[1]: ");
-    serial.print(newFrame.getPayload()[1], DEC);
-    serial.println();
-    serial.println();
+    serial.println("validPQ9Cmd");
+    //rs485.transmit(newFrame);
 }
 
-void validCmd(PQ9Frame &newFrame)
+void validRS485Cmd(PQ9Frame &newFrame)
 {
-    serial.println("Valid command!");
+    serial.println("validRS485Cmd");
+    if (newFrame.getDestination() == 100)
+    {
+        serial.println("Mine!");
+        newFrame.setDestination(1);
+        newFrame.setSource(100);
+        newFrame.getPayload()[1] = 2;
+        rs485.transmit(newFrame);
+        //cmdHandler.received(newFrame);
+    }
+    else
+    {
+        // forward command to PQ9 bus
+        //pq9bus.transmit(newFrame);
+    }
 }
 
 void periodicTask()
@@ -77,21 +81,25 @@ void periodicTask()
     serial.print(uptime, DEC);
     serial.println();*/
 
+/*
     if ((uptime & 0x0F) == 0)
     {
-        pq9bus.transmit(pingCmd);
+        //for (int h = 0; h < 1000; h++)
+        rs485.transmit(pingCmd);
     }
 
     if ((uptime & 0x0F) == 2)
     {
-        pq9bus.transmit(bus2On);
+        //for (int h = 0; h < 1000; h++)
+        rs485.transmit(bus2On);
     }
 
     if ((uptime & 0x0F) == 7)
     {
-        pq9bus.transmit(bus2Off);
+        //for (int h = 0; h < 100; h++)
+        rs485.transmit(bus2Off);
     }
-
+*/
     // collect telemetry
     /*serial.print("Temperature: ");
     tempSensor.getTemperature(t);
@@ -150,7 +158,7 @@ void main(void)
     fram.init();
 
     serial.begin( );                        // baud rate: 9600 bps
-    pq9bus.begin(115200, 100);              // baud rate: 115200 bps
+    //pq9bus.begin(115200, 100);              // baud rate: 115200 bps
                                             // address 100
 //todo: set 1200
     rs485.init(1200);                     // baud rate: 9600 bps
@@ -159,8 +167,8 @@ void main(void)
     // link the command handler to the PQ9 bus:
     // every time a new command is received, it will be forwarded to the command handler
     // TODO: put back the lambda function after bug in CCS has been fixed
-    pq9bus.setReceiveHandler(validPQ9Cmd);
-    rs485.setReceptionHandler(validCmd);
+    //pq9bus.setReceiveHandler(validPQ9Cmd);
+    rs485.setReceptionHandler(validRS485Cmd);
 
     // every time a command is correctly processed, call the watch-dog
     // TODO: put back the lambda function after bug in CCS has been fixed
@@ -194,5 +202,5 @@ void main(void)
     bus2Off.getPayload()[2] = 2;
     bus2Off.getPayload()[3] = 0;
 
-    TaskManager::start(tasks, 2);
+    TaskManager::start(tasks, 1);
 }

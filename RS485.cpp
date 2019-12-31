@@ -25,6 +25,7 @@ void RS485_IRQHandler( unsigned char m )
     {
         // new byte received
         unsigned char data = MAP_UART_receiveData( RS485_instances[m]->module );
+
         switch(state)
         {
             case 0:
@@ -66,7 +67,7 @@ void RS485_IRQHandler( unsigned char m )
                 {
                     state = 0;
                 }
-                if (index == size - 2)
+                if (index == size - 1)
                 {
                     state = 4;
                 }
@@ -74,16 +75,6 @@ void RS485_IRQHandler( unsigned char m )
                 break;
 
             case 4:
-                // first byte CRC
-                status = 5;
-                break;
-
-            case 5:
-                // second byte CRC
-                status = 6;
-                break;
-
-            case 6:
                 // last byte
                 if (data == 0x7D)
                 {
@@ -95,7 +86,6 @@ void RS485_IRQHandler( unsigned char m )
 
             default:
                 state = 0;
-
         }
     }
 }
@@ -117,102 +107,7 @@ void RS485_IRQHandler2( void )
 
 void RS485_IRQHandler3( void )
 {
-    //RS485_IRQHandler(3);
-    uint32_t status = MAP_UART_getEnabledInterruptStatus( RS485_instances[3]->module );
-
-    if (status & EUSCI_A_UART_RECEIVE_INTERRUPT_FLAG)
-    {
-        // new byte received
-        unsigned char data = MAP_UART_receiveData( RS485_instances[3]->module );
-
-        serial.print(data, HEX);
-        serial.print(" ");
-        serial.print(index, DEC);
-        serial.println();
-
-        switch(state)
-        {
-            case 0:
-                if (data == 0x7E)
-                {
-                    state = 1;
-                }
-                break;
-
-            case 1:
-                size = (((unsigned short)data) & 0xFF) << 8;
-                state = 2;
-                break;
-
-            case 2:
-                size |= ((unsigned short)data) & 0xFF;
-                index = 0;
-                state = 3;
-                break;
-
-            case 3:
-                if (index == 0)
-                {
-                    received.setDestination(data);
-                    serial.print("D");
-                    serial.print(data, DEC);
-                    serial.println();
-                }
-                if (index == 1)
-                {
-                    received.setPayloadSize(data);
-                    serial.print("S");
-                    serial.print(data, DEC);
-                    serial.println();
-                }
-                if (index == 2)
-                {
-                    received.setSource(data);
-                    serial.print("s");
-                    serial.print(data, DEC);
-                    serial.println();
-                }
-                if ((index > 2) && (index < 258))
-                {
-                    received.getPayload()[index - 3] = data;
-                }
-                if (index >= 258)
-                {
-                    state = 0;
-                }
-                if (index == size - 3)
-                {
-                    state = 4;
-                }
-                index++;
-                break;
-
-            case 4:
-                // first byte CRC
-                state = 5;
-                break;
-
-            case 5:
-                // second byte CRC
-                state = 6;
-                break;
-
-            case 6:
-                // last byte
-                if (data == 0x7D)
-                {
-                    serial.println("F");
-
-                    // frame found!
-                    RS485_instances[3]->user_onReceive(received);
-                }
-                state = 0;
-                break;
-
-            default:
-                state = 0;
-        }
-    }
+    RS485_IRQHandler(3);
 }
 
 RS485::RS485(uint8_t mod, unsigned long port, unsigned long pin)
@@ -248,9 +143,9 @@ void RS485::init(unsigned int baudrate)
 {
     this->baudrate = baudrate;
 
-    MAP_UART_disableModule(module);   //disable UART operation for configuration settings
+    MAP_UART_disableModule(module);     // disable UART operation for configuration settings
 
-    _initMain();    //UART pins init
+    _initMain();                        // UART pins init
 
     eUSCI_UART_Config Config;
 
@@ -305,6 +200,52 @@ void RS485::setReceptionHandler( void (*islHandle)(PQ9Frame &) )
     }
 }
 
+void RS485::transmit( PQ9Frame &frame )
+{
+    // Introduce a delay to prevent starting transmission before the write
+    // enable of the other side has been turned off (due to the USCI42 errata)
+    // introduce a 2 bytes delay to make sure the UART buffer is flushed
+    uint32_t d = MAP_CS_getMCLK() * 4 / baudrate;
+    for(uint32_t k = 0; k < d;  k++)
+    {
+        __asm("  nop");
+    }
+
+    MAP_GPIO_setOutputHighOnPin( TXEnablePort, TXEnablePin );
+
+    // add some extra delay here: I need at least 120ns
+
+    MAP_UART_transmitData(module, 0x7E);
+
+    unsigned short size = frame.getPayloadSize() + 3;
+
+    MAP_UART_transmitData(module, (size >> 8) & 0xFF);
+    MAP_UART_transmitData(module, size & 0xFF);
+
+    MAP_UART_transmitData(module, frame.getDestination());
+
+    MAP_UART_transmitData(module, frame.getPayloadSize());
+
+    MAP_UART_transmitData(module, frame.getSource());
+
+    for (int i = 0; i < frame.getPayloadSize(); i++)
+    {
+        MAP_UART_transmitData(module, frame.getPayload()[i]);
+    }
+
+    MAP_UART_transmitData(module, 0x7D);
+
+    // Workaround for USCI42 errata
+    // introduce a 2 bytes delay to make sure the UART buffer is flushed
+    uint32_t d1 = MAP_CS_getMCLK() * 4 / baudrate;
+    for(uint32_t k = 0; k < d1;  k++)
+    {
+        __asm("  nop");
+    }
+
+    MAP_GPIO_setOutputLowOnPin( TXEnablePort, TXEnablePin );
+}
+
 void RS485::_initMain( void )
 {
     switch (module)
@@ -349,12 +290,11 @@ void RS485::_initMain( void )
 
         break;
     }
+
+    // init RXD / TXD pins
     MAP_GPIO_setAsPeripheralModuleFunctionInputPin(modulePort, modulePins, GPIO_PRIMARY_MODULE_FUNCTION);
 
-    MAP_GPIO_setAsPeripheralModuleFunctionInputPin( TXEnablePort,
-                                        TXEnablePin, GPIO_PRIMARY_MODULE_FUNCTION );
-
+    // init TX enable
     MAP_GPIO_setOutputLowOnPin( TXEnablePort, TXEnablePin );
-
     MAP_GPIO_setAsOutputPin( TXEnablePort, TXEnablePin );
 }
