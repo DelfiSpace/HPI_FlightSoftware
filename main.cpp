@@ -2,8 +2,8 @@
 
 // CDHS bus handler
 //PQ9Bus pq9bus(1, GPIO_PORT_P2, GPIO_PIN1);
-//RS485 rs485(3, GPIO_PORT_P9, GPIO_PIN0);
-RS485 rs485(3, GPIO_PORT_P10, GPIO_PIN0);
+RS485 rs485(3, GPIO_PORT_P9, GPIO_PIN0);
+
 
 // debug console handler
 DSerial serial;
@@ -19,9 +19,7 @@ MB85RS fram(spi, GPIO_PORT_P1, GPIO_PIN0 );
 
 // services running in the system
 PingService ping;
-//ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
-// TODO Fix!
-ResetService reset( GPIO_PORT_P5, GPIO_PIN0 );
+ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
 
 Service* services[] = { &ping, &reset };
 
@@ -39,7 +37,7 @@ PQ9Frame pingCmd, bus2On, bus2Off;
 void validPQ9Cmd(PQ9Frame &newFrame)
 {
     serial.println("validPQ9Cmd");
-    //rs485.transmit(newFrame);
+    rs485.transmit(newFrame);
 }
 
 void validRS485Cmd(PQ9Frame &newFrame)
@@ -202,5 +200,5 @@ void main(void)
     bus2Off.getPayload()[2] = 2;
     bus2Off.getPayload()[3] = 0;
 
-    TaskManager::start(tasks, 1);
+    TaskManager::start(tasks, 2);
 }
