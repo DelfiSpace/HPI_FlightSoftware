@@ -159,9 +159,8 @@ void main(void)
     serial.begin( );                                // baud rate: 9600 bps
     pq9bus.begin(115200, HPI_ADDRESS);              // baud rate: 115200 bps
                                                     // address 100
-//todo: set 1200
-    rs485.init(1200, HPI_ADDRESS);                  // baud rate: 9600 bps
 
+    rs485.init(9600, HPI_ADDRESS);                  // baud rate: 9600 bps
 
     // link the command handler to the PQ9 bus:
     // every time a new command is received, it will be forwarded to the command handler
