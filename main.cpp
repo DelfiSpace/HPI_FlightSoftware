@@ -1,9 +1,8 @@
 #include "HPI.h"
 
 // CDHS bus handler
-//PQ9Bus pq9bus(1, GPIO_PORT_P2, GPIO_PIN1);
+PQ9Bus pq9bus(1, GPIO_PORT_P2, GPIO_PIN1);
 RS485 rs485(3, GPIO_PORT_P9, GPIO_PIN0);
-
 
 // debug console handler
 DSerial serial;
@@ -23,10 +22,13 @@ ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
 
 Service* services[] = { &ping, &reset };
 
-// COMMS board tasks
-//PQ9CommandHandler cmdHandler(pq9bus, services, 2);
+// HPI board tasks
+PQ9CommandHandler cmdHandler(rs485, services, 2);
 PeriodicTask timerTask(FCLOCK, periodicTask);
-Task* tasks[] = { &timerTask };
+Task* tasks[] = { &timerTask, &cmdHandler };
+
+// used to forward PQ9Frames
+volatile unsigned char sourceAddress = HPI_ADDRESS;
 
 // system uptime
 unsigned long uptime = 0;
@@ -34,29 +36,33 @@ unsigned long uptime = 0;
 PQ9Frame pingCmd, bus2On, bus2Off;
 
 // TODO: remove when bug in CCS has been solved
-void validPQ9Cmd(PQ9Frame &newFrame)
+void newPQ9Cmd(PQ9Frame &newFrame)
 {
     serial.println("validPQ9Cmd");
+    newFrame.setDestination(sourceAddress);
     rs485.transmit(newFrame);
 }
 
-void validRS485Cmd(PQ9Frame &newFrame)
+void newRS485Cmd(PQ9Frame &newFrame)
 {
     serial.println("validRS485Cmd");
-    if (newFrame.getDestination() == 100)
+    if (newFrame.getDestination() == HPI_ADDRESS)
     {
         serial.println("Mine!");
-        newFrame.setDestination(1);
-        newFrame.setSource(100);
-        newFrame.getPayload()[1] = 2;
-        rs485.transmit(newFrame);
-        //cmdHandler.received(newFrame);
+        cmdHandler.received(newFrame);
     }
     else
     {
         // forward command to PQ9 bus
-        //pq9bus.transmit(newFrame);
+        sourceAddress = newFrame.getSource();
+        newFrame.setSource( HPI_ADDRESS );
+        pq9bus.transmit(newFrame);
     }
+}
+
+void validRS485Cmd( void )
+{
+    reset.kickInternalWatchDog();
 }
 
 void periodicTask()
@@ -66,7 +72,6 @@ void periodicTask()
 
     // increase the timer, this happens every second
     uptime++;
-
 
     unsigned long storedUptime;
     fram.read(0, (unsigned char *)&storedUptime, sizeof(storedUptime));
@@ -122,10 +127,6 @@ void periodicTask()
     // kick hardware watch-dog after every telemetry collection happens
     reset.kickExternalWatchDog();
 
-    // TODO: check if this is the only option
-    // kick the internal watchdog as well
-    reset.kickInternalWatchDog();
-
     fram.write(0, (unsigned char *)&uptime, sizeof(uptime));
 }
 
@@ -155,23 +156,23 @@ void main(void)
     spi.initMaster(DSPI::MODE0, DSPI::MSBFirst, 1000000);
     fram.init();
 
-    serial.begin( );                        // baud rate: 9600 bps
-    //pq9bus.begin(115200, 100);              // baud rate: 115200 bps
-                                            // address 100
+    serial.begin( );                                // baud rate: 9600 bps
+    pq9bus.begin(115200, HPI_ADDRESS);              // baud rate: 115200 bps
+                                                    // address 100
 //todo: set 1200
-    rs485.init(1200);                     // baud rate: 9600 bps
+    rs485.init(1200, HPI_ADDRESS);                  // baud rate: 9600 bps
 
 
     // link the command handler to the PQ9 bus:
     // every time a new command is received, it will be forwarded to the command handler
     // TODO: put back the lambda function after bug in CCS has been fixed
-    //pq9bus.setReceiveHandler(validPQ9Cmd);
-    rs485.setReceptionHandler(validRS485Cmd);
+    pq9bus.setReceiveHandler(newPQ9Cmd);
+    rs485.setReceptionHandler(newRS485Cmd);
 
     // every time a command is correctly processed, call the watch-dog
     // TODO: put back the lambda function after bug in CCS has been fixed
     //cmdHandler.onValidCommand([]{ reset.kickInternalWatchDog(); });
-    //cmdHandler.onValidCommand(validCmd);
+    cmdHandler.onValidCommand(validRS485Cmd);
 
     serial.println("HPI booting...");
 
@@ -200,5 +201,5 @@ void main(void)
     bus2Off.getPayload()[2] = 2;
     bus2Off.getPayload()[3] = 0;
 
-    TaskManager::start(tasks, 1);
+    TaskManager::start(tasks, 2);
 }

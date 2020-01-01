@@ -139,9 +139,10 @@ RS485::RS485(uint8_t mod, unsigned long port, unsigned long pin)
     TXEnablePin = pin;
 }
 
-void RS485::init(unsigned int baudrate)
+void RS485::init( unsigned int baudrate, unsigned char address)
 {
     this->baudrate = baudrate;
+    this->address = address;
 
     MAP_UART_disableModule(module);     // disable UART operation for configuration settings
 
@@ -297,4 +298,9 @@ void RS485::_initMain( void )
     // init TX enable
     MAP_GPIO_setOutputLowOnPin( TXEnablePort, TXEnablePin );
     MAP_GPIO_setAsOutputPin( TXEnablePort, TXEnablePin );
+}
+
+unsigned char RS485::getAddress()
+{
+    return address;
 }

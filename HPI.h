@@ -28,7 +28,8 @@
 #include "PingService.h"
 #include "ResetService.h"
 
-#define FCLOCK 48000000
+#define FCLOCK                  48000000
+#define HPI_ADDRESS             100
 
 // callback functions
 void periodicTask();

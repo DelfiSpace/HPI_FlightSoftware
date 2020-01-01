@@ -9,13 +9,14 @@
 #define RS485_H_
 
 #include <driverlib.h>
+#include "PQ9Sender.h"
 #include "PQ9Frame.h"
 #include "DSerial.h"
 
 // Device specific includes
 #include "inc/msp432p401r.h"
 
-class RS485
+class RS485 : public PQ9Sender
 {
 private:
     uint32_t module;
@@ -24,6 +25,7 @@ private:
     uint8_t modulePort;
     uint16_t modulePins;
     unsigned int baudrate;
+    unsigned char address;
     void (*user_onReceive)( PQ9Frame & );
 
     friend void RS485_IRQHandler( unsigned char m );
@@ -35,9 +37,10 @@ private:
 
 public:
     RS485( uint8_t mod, unsigned long port, unsigned long pin );
-    void init( unsigned int baudrate );
+    void init( unsigned int baudrate, unsigned char address );
     void setReceptionHandler( void (*islHandle)( PQ9Frame & ) );
-    void transmit( PQ9Frame &frame );
+    virtual void transmit( PQ9Frame &frame );
+    virtual unsigned char getAddress();
 };
 
 #endif /* RS485_H_ */
