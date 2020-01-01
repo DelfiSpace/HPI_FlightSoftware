@@ -200,5 +200,5 @@ void main(void)
     bus2Off.getPayload()[2] = 2;
     bus2Off.getPayload()[3] = 0;
 
-    TaskManager::start(tasks, 2);
+    TaskManager::start(tasks, 1);
 }
