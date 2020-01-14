@@ -178,7 +178,7 @@ void RS485::init( unsigned int baudrate, unsigned char address)
     MAP_UART_enableModule(module);                                              // enable UART operation
 }
 
-void RS485::setReceptionHandler( void (*islHandle)(PQ9Frame &) )
+void RS485::setReceiveHandler( void (*islHandle)(PQ9Frame &) )
 {
     user_onReceive = islHandle; //parse handler function
 

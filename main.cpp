@@ -166,7 +166,7 @@ void main(void)
     // every time a new command is received, it will be forwarded to the command handler
     // TODO: put back the lambda function after bug in CCS has been fixed
     pq9bus.setReceiveHandler(newPQ9Cmd);
-    rs485.setReceptionHandler(newRS485Cmd);
+    rs485.setReceiveHandler(newRS485Cmd);
 
     // every time a command is correctly processed, call the watch-dog
     // TODO: put back the lambda function after bug in CCS has been fixed

@@ -8,15 +8,15 @@
 #ifndef RS485_H_
 #define RS485_H_
 
+#include "DataBus.h"
 #include <driverlib.h>
-#include "PQ9Sender.h"
 #include "PQ9Frame.h"
 #include "DSerial.h"
 
 // Device specific includes
 #include "inc/msp432p401r.h"
 
-class RS485 : public PQ9Sender
+class RS485 : public DataBus
 {
 private:
     uint32_t module;
@@ -38,7 +38,7 @@ private:
 public:
     RS485( uint8_t mod, unsigned long port, unsigned long pin );
     void init( unsigned int baudrate, unsigned char address );
-    void setReceptionHandler( void (*islHandle)( PQ9Frame & ) );
+    virtual void setReceiveHandler( void (*islHandle)( PQ9Frame & ) );
     virtual void transmit( PQ9Frame &frame );
     virtual unsigned char getAddress();
 };
