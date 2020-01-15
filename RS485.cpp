@@ -178,7 +178,7 @@ void RS485::init( unsigned int baudrate, unsigned char address)
     MAP_UART_enableModule(module);                                              // enable UART operation
 }
 
-void RS485::setReceiveHandler( void (*islHandle)(PQ9Frame &) )
+void RS485::setReceiveHandler( void (*islHandle)(DataFrame &) )
 {
     user_onReceive = islHandle; //parse handler function
 
@@ -201,7 +201,7 @@ void RS485::setReceiveHandler( void (*islHandle)(PQ9Frame &) )
     }
 }
 
-void RS485::transmit( PQ9Frame &frame )
+void RS485::transmit( DataFrame &frame )
 {
     // Introduce a delay to prevent starting transmission before the write
     // enable of the other side has been turned off (due to the USCI42 errata)

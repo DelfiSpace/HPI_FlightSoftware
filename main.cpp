@@ -23,7 +23,7 @@ ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
 Service* services[] = { &ping, &reset };
 
 // HPI board tasks
-PQ9CommandHandler cmdHandler(rs485, services, 2);
+CommandHandler<PQ9Frame> cmdHandler(rs485, services, 2);
 PeriodicTask timerTask(FCLOCK, periodicTask);
 Task* tasks[] = { &timerTask, &cmdHandler };
 
@@ -36,14 +36,14 @@ unsigned long uptime = 0;
 PQ9Frame pingCmd, bus2On, bus2Off;
 
 // TODO: remove when bug in CCS has been solved
-void newPQ9Cmd(PQ9Frame &newFrame)
+void newPQ9Cmd(DataFrame &newFrame)
 {
     serial.println("validPQ9Cmd");
     newFrame.setDestination(sourceAddress);
     rs485.transmit(newFrame);
 }
 
-void newRS485Cmd(PQ9Frame &newFrame)
+void newRS485Cmd(DataFrame &newFrame)
 {
     serial.println("validRS485Cmd");
     if (newFrame.getDestination() == HPI_ADDRESS)

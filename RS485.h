@@ -26,7 +26,7 @@ private:
     uint16_t modulePins;
     unsigned int baudrate;
     unsigned char address;
-    void (*user_onReceive)( PQ9Frame & );
+    void (*user_onReceive)( DataFrame & );
 
     friend void RS485_IRQHandler( unsigned char m );
     friend void RS485_IRQHandler0( void );
@@ -38,8 +38,8 @@ private:
 public:
     RS485( uint8_t mod, unsigned long port, unsigned long pin );
     void init( unsigned int baudrate, unsigned char address );
-    virtual void setReceiveHandler( void (*islHandle)( PQ9Frame & ) );
-    virtual void transmit( PQ9Frame &frame );
+    virtual void setReceiveHandler( void (*islHandle)( DataFrame & ) );
+    virtual void transmit( DataFrame &frame );
     virtual unsigned char getAddress();
 };
 
