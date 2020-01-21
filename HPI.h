@@ -27,6 +27,7 @@
 #include "Service.h"
 #include "PingService.h"
 #include "ResetService.h"
+#include "PeriodicTaskNotifier.h"
 
 #define FCLOCK                  48000000
 #define HPI_ADDRESS             100

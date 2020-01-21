@@ -24,7 +24,9 @@ Service* services[] = { &ping, &reset };
 
 // HPI board tasks
 CommandHandler<PQ9Frame> cmdHandler(rs485, services, 2);
-PeriodicTask timerTask(FCLOCK, periodicTask);
+Task timerTask(periodicTask);
+Task* periodicTasks[] = {&timerTask};
+PeriodicTaskNotifier periodicNotifier = PeriodicTaskNotifier(FCLOCK, periodicTasks, 1);
 Task* tasks[] = { &timerTask, &cmdHandler };
 
 // used to forward PQ9Frames
@@ -140,12 +142,6 @@ void main(void)
     // - clock tree
     DelfiPQcore::initMCU();
 
-    // initialize the reset handler:
-    // - prepare the watch-dog
-    // - initialize the pins for the hardware watch-dog
-    // - prepare the pin for power cycling the system
-    reset.init();
-
     // init I2c bus and I2C devices
     i2c.setFastMode();
     i2c.begin();
@@ -161,6 +157,13 @@ void main(void)
                                                     // address 100
 
     rs485.init(9600, HPI_ADDRESS);                  // baud rate: 9600 bps
+
+    // initialize the reset handler:
+    // - prepare the watch-dog
+    // - initialize the pins for the hardware watch-dog
+    // - prepare the pin for power cycling the system
+    reset.init();
+
 
     // link the command handler to the PQ9 bus:
     // every time a new command is received, it will be forwarded to the command handler
