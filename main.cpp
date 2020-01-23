@@ -40,17 +40,17 @@ PQ9Frame pingCmd, bus2On, bus2Off;
 // TODO: remove when bug in CCS has been solved
 void newPQ9Cmd(DataFrame &newFrame)
 {
-    serial.println("validPQ9Cmd");
+    //serial.println("validPQ9Cmd");
     newFrame.setDestination(sourceAddress);
     rs485.transmit(newFrame);
 }
 
 void newRS485Cmd(DataFrame &newFrame)
 {
-    serial.println("validRS485Cmd");
+    //serial.println("validRS485Cmd");
     if (newFrame.getDestination() == HPI_ADDRESS)
     {
-        serial.println("Mine!");
+        //serial.println("Mine!");
         cmdHandler.received(newFrame);
     }
     else

@@ -206,8 +206,8 @@ void RS485::transmit( DataFrame &frame )
     // Introduce a delay to prevent starting transmission before the write
     // enable of the other side has been turned off (due to the USCI42 errata)
     // introduce a 2 bytes delay to make sure the UART buffer is flushed
-    uint32_t d = MAP_CS_getMCLK() * 4 / baudrate;
-    for(uint32_t k = 0; k < d;  k++)
+    uint32_t d1 = (baudrate == 9600) ? MAP_CS_getMCLK() * 3 / baudrate : MAP_CS_getMCLK() * 4 / baudrate;
+    for(uint32_t k = 0; k < d1;  k++)
     {
         __asm("  nop");
     }
@@ -238,8 +238,8 @@ void RS485::transmit( DataFrame &frame )
 
     // Workaround for USCI42 errata
     // introduce a 2 bytes delay to make sure the UART buffer is flushed
-    uint32_t d1 = MAP_CS_getMCLK() * 4 / baudrate;
-    for(uint32_t k = 0; k < d1;  k++)
+    uint32_t d = (baudrate == 9600) ? MAP_CS_getMCLK() * 2 / baudrate : MAP_CS_getMCLK() * 3 / baudrate;
+    for(uint32_t k = 0; k < d;  k++)
     {
         __asm("  nop");
     }
