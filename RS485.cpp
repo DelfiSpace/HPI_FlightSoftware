@@ -43,7 +43,16 @@ void RS485_IRQHandler( unsigned char m )
             case 2:
                 size |= ((unsigned short)data) & 0xFF;
                 index = 0;
-                state = 3;
+                if (size > 258)
+                {
+                    // size is too big, ignore the frame and start over
+                    state = 0;
+                }
+                else
+                {
+                    // size matched, keep going...
+                    state = 3;
+                }
                 break;
 
             case 3:
@@ -59,11 +68,11 @@ void RS485_IRQHandler( unsigned char m )
                 {
                     received.setSource(data);
                 }
-                if ((index > 2) && (index < 258))
+                if ((index > 2) && (index <= 258))
                 {
                     received.getPayload()[index - 3] = data;
                 }
-                if (index >= 258)
+                if (index > 258)
                 {
                     state = 0;
                 }
