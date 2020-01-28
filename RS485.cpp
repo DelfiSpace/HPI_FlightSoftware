@@ -32,6 +32,7 @@ void RS485_IRQHandler( unsigned char m )
                 if (data == 0x7E)
                 {
                     state = 1;
+                    RS485_instances[m]->initCRC();
                 }
                 break;
 
@@ -59,18 +60,22 @@ void RS485_IRQHandler( unsigned char m )
                 if (index == 0)
                 {
                     received.setDestination(data);
+                    RS485_instances[m]->calculateCRC(data);
                 }
                 if (index == 1)
                 {
                     received.setPayloadSize(data);
+                    RS485_instances[m]->calculateCRC(data);
                 }
                 if (index == 2)
                 {
                     received.setSource(data);
+                    RS485_instances[m]->calculateCRC(data);
                 }
                 if ((index > 2) && (index <= 258))
                 {
                     received.getPayload()[index - 3] = data;
+                    RS485_instances[m]->calculateCRC(data);
                 }
                 if (index > 258)
                 {
@@ -84,6 +89,30 @@ void RS485_IRQHandler( unsigned char m )
                 break;
 
             case 4:
+                // CRC first byte
+                if ( data == ((RS485_instances[m]->crc >> 8) & 0xFF) )
+                {
+                    state = 5;
+                }
+                else
+                {
+                    state = 0;
+                }
+                break;
+
+            case 5:
+                // CRC second byte
+                if ( data == (RS485_instances[m]->crc & 0xFF) )
+                {
+                    state = 6;
+                }
+                else
+                {
+                    state = 0;
+                }
+                break;
+
+            case 6:
                 // last byte
                 if (data == 0x7D)
                 {
@@ -212,6 +241,16 @@ void RS485::setReceiveHandler( void (*islHandle)(DataFrame &) )
 
 void RS485::transmit( DataFrame &frame )
 {
+    // calculate the CRC before transmitting the frame
+    initCRC();
+    calculateCRC(frame.getDestination());
+    calculateCRC(frame.getPayloadSize());
+    calculateCRC(frame.getSource());
+    for (int i = 0; i < frame.getPayloadSize(); i++)
+    {
+        calculateCRC(frame.getPayload()[i]);
+    }
+
     // Introduce a delay to prevent starting transmission before the write
     // enable of the other side has been turned off (due to the USCI42 errata)
     // introduce a 2 bytes delay to make sure the UART buffer is flushed
@@ -222,8 +261,6 @@ void RS485::transmit( DataFrame &frame )
     }
 
     MAP_GPIO_setOutputHighOnPin( TXEnablePort, TXEnablePin );
-
-    // add some extra delay here: I need at least 120ns
 
     MAP_UART_transmitData(module, 0x7E);
 
@@ -243,6 +280,9 @@ void RS485::transmit( DataFrame &frame )
         MAP_UART_transmitData(module, frame.getPayload()[i]);
     }
 
+    MAP_UART_transmitData(module, (crc >> 8) & 0xFF);
+    MAP_UART_transmitData(module, crc & 0xFF);
+
     MAP_UART_transmitData(module, 0x7D);
 
     // Workaround for USCI42 errata
@@ -254,6 +294,28 @@ void RS485::transmit( DataFrame &frame )
     }
 
     MAP_GPIO_setOutputLowOnPin( TXEnablePort, TXEnablePin );
+}
+
+void RS485::initCRC()
+{
+    crc = 0xFFFF;
+}
+
+void RS485::calculateCRC(unsigned char data)
+{
+    for (unsigned int i = 0; i < 8; i++)
+    {
+        if (((( crc & 0x8000) >> 8) ^ (data & 0x80)) != 0)
+        {
+            crc <<= 1;
+            crc ^= POLY;
+        }
+        else
+        {
+            crc <<= 1;
+        }
+        data <<= 1;
+    }
 }
 
 void RS485::_initMain( void )

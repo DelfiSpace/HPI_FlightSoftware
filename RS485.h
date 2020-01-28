@@ -16,6 +16,8 @@
 // Device specific includes
 #include "inc/msp432p401r.h"
 
+#define POLY 0x1021
+
 class RS485 : public DataBus
 {
 private:
@@ -27,12 +29,15 @@ private:
     unsigned int baudrate;
     unsigned char address;
     void (*user_onReceive)( DataFrame & );
+    unsigned short crc;
 
     friend void RS485_IRQHandler( unsigned char m );
     friend void RS485_IRQHandler0( void );
     friend void RS485_IRQHandler1( void );
     friend void RS485_IRQHandler2( void );
     friend void RS485_IRQHandler3( void );
+    void initCRC();
+    void calculateCRC(unsigned char data);
     void _initMain( void );
 
 public:
