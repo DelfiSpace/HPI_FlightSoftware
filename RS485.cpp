@@ -44,7 +44,7 @@ void RS485_IRQHandler( unsigned char m )
             case 2:
                 size |= ((unsigned short)data) & 0xFF;
                 index = 0;
-                if (size > 258)
+                if (size > 260)
                 {
                     // size is too big, ignore the frame and start over
                     state = 0;
