@@ -81,7 +81,7 @@ void RS485_IRQHandler( unsigned char m )
                 {
                     state = 0;
                 }
-                if (index == size - 1)
+                if (index == size - 3)
                 {
                     state = 4;
                 }
@@ -264,7 +264,7 @@ void RS485::transmit( DataFrame &frame )
 
     MAP_UART_transmitData(module, 0x7E);
 
-    unsigned short size = frame.getPayloadSize() + 3;
+    unsigned short size = frame.getPayloadSize() + 5;
 
     MAP_UART_transmitData(module, (size >> 8) & 0xFF);
     MAP_UART_transmitData(module, size & 0xFF);
