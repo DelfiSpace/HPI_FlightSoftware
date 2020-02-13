@@ -13,17 +13,18 @@ TMP100 tempSensor(i2c, 0x48);
 INA226 powerBus(i2c, 0x40);
 
 // SPI bus
+
 DSPI spi(3);
 MB85RS fram(spi, GPIO_PORT_P1, GPIO_PIN0 );
 
 // services running in the system
 PingService ping;
 ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
-
-Service* services[] = { &ping, &reset };
+TestServiceHPI test = TestServiceHPI();
+Service* services[] = { &ping, &reset , &test};
 
 // HPI board tasks
-CommandHandler<PQ9Frame> cmdHandler(rs485, services, 2);
+CommandHandler<PQ9Frame> cmdHandler(rs485, services, 3);
 Task timerTask(periodicTask);
 Task* periodicTasks[] = {&timerTask};
 PeriodicTaskNotifier periodicNotifier = PeriodicTaskNotifier(FCLOCK, periodicTasks, 1);
@@ -69,6 +70,18 @@ void validRS485Cmd( void )
 
 void periodicTask()
 {
+    serial.print("lowCurrent input: ");
+    while(MAP_ADC14_isBusy());
+    uint16_t cResult =  MAP_ADC14_getResult(ADC_MEM9) * 5000/16384;
+    uint16_t cResult2 = MAP_ADC14_getResult(ADC_MEM8) * 5000/16384;
+    //(2500mV)- VCC-VSS range.
+    //16384 - 2 Byte Range
+    //2 - voltage divider compensation
+    serial.print(cResult, DEC);
+    serial.print("  |  output: ");
+    serial.println(cResult2, DEC);
+    MAP_ADC14_toggleConversionTrigger();
+
     signed short i, t;
     unsigned short v;
 
@@ -202,6 +215,42 @@ void main(void)
     bus2Off.getPayload()[1] = 1;
     bus2Off.getPayload()[2] = 2;
     bus2Off.getPayload()[3] = 0;
+
+    /* Setting reference voltage to 2.5 and enabling reference */
+    MAP_REF_A_setReferenceVoltage(REF_A_VREF2_5V);
+    MAP_REF_A_enableReferenceVoltage();
+
+    /* Initializing ADC (MCLK/1/1) */
+    MAP_ADC14_enableModule();
+    MAP_ADC14_initModule(ADC_CLOCKSOURCE_MCLK, ADC_PREDIVIDER_1, ADC_DIVIDER_1,
+            0);
+
+    /* Configuring GPIOs (4.4 & 4.5) */
+    MAP_GPIO_setAsPeripheralModuleFunctionInputPin(GPIO_PORT_P4,
+                GPIO_PIN4 | GPIO_PIN5, GPIO_TERTIARY_MODULE_FUNCTION);
+
+    /* Configuring ADC Memory (ADC_MEM6 - ADC_MEM8 (A6 - A8)  without repeat)
+         * with internal 2.5v reference */
+    MAP_ADC14_configureMultiSequenceMode(ADC_MEM8, ADC_MEM9, false);
+    MAP_ADC14_configureConversionMemory(ADC_MEM8,
+            ADC_VREFPOS_INTBUF_VREFNEG_VSS,
+            ADC_INPUT_A8, false);
+    MAP_ADC14_configureConversionMemory(ADC_MEM9,
+            ADC_VREFPOS_INTBUF_VREFNEG_VSS,
+            ADC_INPUT_A9, false);
+
+    MAP_ADC14_setSampleHoldTrigger(ADC_TRIGGER_ADCSC, false);
+
+    //ADC14_setSampleHoldTime(ADC_PULSE_WIDTH_8,ADC_PULSE_WIDTH_8);
+    /* Configuring Sample Timer */
+    MAP_ADC14_enableSampleTimer(ADC_MANUAL_ITERATION);
+
+    /* Enabling/Toggling Conversion */
+    MAP_ADC14_enableConversion();
+//  MAP_ADC14_setSampleHoldTrigger(ADC_TRIGGER_ADCSC, false);
+
+    MAP_ADC14_toggleConversionTrigger();
+
 
     TaskManager::start(tasks, 2);
 }
