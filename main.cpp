@@ -70,17 +70,24 @@ void validRS485Cmd( void )
 
 void periodicTask()
 {
-    serial.print("lowCurrent input: ");
-    while(MAP_ADC14_isBusy());
-    uint16_t cResult =  MAP_ADC14_getResult(ADC_MEM9) * 5000/16384;
-    uint16_t cResult2 = MAP_ADC14_getResult(ADC_MEM8) * 5000/16384;
-    //(2500mV)- VCC-VSS range.
-    //16384 - 2 Byte Range
-    //2 - voltage divider compensation
-    serial.print(cResult, DEC);
-    serial.print("  |  output: ");
-    serial.println(cResult2, DEC);
-    MAP_ADC14_toggleConversionTrigger();
+//    uint64_t status = MAP_ADC14_getEnabledInterruptStatus();
+//    serial.println(status, HEX);
+//    //while(MAP_ADC14_isBusy());
+//    if (ADC_INT1 & status){
+//        MAP_ADC14_clearInterruptFlag(status);
+//        serial.print("INTPUT: ");
+//        uint16_t cResult = MAP_ADC14_getResult(ADC_MEM0);
+//        cResult = (cResult * 5000) / 16384;
+//        serial.print(cResult, DEC);
+//        serial.print("  |  OUTPUT: ");
+//        cResult = MAP_ADC14_getResult(ADC_MEM1);
+//        cResult = (cResult * 5000) / 16384;
+//        serial.print(cResult, DEC);
+//        serial.println();
+//        MAP_ADC14_toggleConversionTrigger();
+//    }
+
+
 
     signed short i, t;
     unsigned short v;
@@ -141,7 +148,7 @@ void periodicTask()
 
     // kick hardware watch-dog after every telemetry collection happens
     reset.kickExternalWatchDog();
-
+    reset.kickInternalWatchDog();
     fram.write(0, (unsigned char *)&uptime, sizeof(uptime));
 }
 
@@ -189,8 +196,6 @@ void main(void)
     //cmdHandler.onValidCommand([]{ reset.kickInternalWatchDog(); });
     cmdHandler.onValidCommand(validRS485Cmd);
 
-    serial.println("HPI booting...");
-
     // ping request
     pingCmd.setDestination(2);
     pingCmd.setSource(100);
@@ -216,40 +221,8 @@ void main(void)
     bus2Off.getPayload()[2] = 2;
     bus2Off.getPayload()[3] = 0;
 
-    /* Setting reference voltage to 2.5 and enabling reference */
-    MAP_REF_A_setReferenceVoltage(REF_A_VREF2_5V);
-    MAP_REF_A_enableReferenceVoltage();
 
-    /* Initializing ADC (MCLK/1/1) */
-    MAP_ADC14_enableModule();
-    MAP_ADC14_initModule(ADC_CLOCKSOURCE_MCLK, ADC_PREDIVIDER_1, ADC_DIVIDER_1,
-            0);
-
-    /* Configuring GPIOs (4.4 & 4.5) */
-    MAP_GPIO_setAsPeripheralModuleFunctionInputPin(GPIO_PORT_P4,
-                GPIO_PIN4 | GPIO_PIN5, GPIO_TERTIARY_MODULE_FUNCTION);
-
-    /* Configuring ADC Memory (ADC_MEM6 - ADC_MEM8 (A6 - A8)  without repeat)
-         * with internal 2.5v reference */
-    MAP_ADC14_configureMultiSequenceMode(ADC_MEM8, ADC_MEM9, false);
-    MAP_ADC14_configureConversionMemory(ADC_MEM8,
-            ADC_VREFPOS_INTBUF_VREFNEG_VSS,
-            ADC_INPUT_A8, false);
-    MAP_ADC14_configureConversionMemory(ADC_MEM9,
-            ADC_VREFPOS_INTBUF_VREFNEG_VSS,
-            ADC_INPUT_A9, false);
-
-    MAP_ADC14_setSampleHoldTrigger(ADC_TRIGGER_ADCSC, false);
-
-    //ADC14_setSampleHoldTime(ADC_PULSE_WIDTH_8,ADC_PULSE_WIDTH_8);
-    /* Configuring Sample Timer */
-    MAP_ADC14_enableSampleTimer(ADC_MANUAL_ITERATION);
-
-    /* Enabling/Toggling Conversion */
-    MAP_ADC14_enableConversion();
-//  MAP_ADC14_setSampleHoldTrigger(ADC_TRIGGER_ADCSC, false);
-
-    MAP_ADC14_toggleConversionTrigger();
+    serial.println("HPI booting...");
 
 
     TaskManager::start(tasks, 2);
