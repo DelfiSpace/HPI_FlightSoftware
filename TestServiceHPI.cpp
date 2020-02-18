@@ -7,7 +7,9 @@
 
 
 #include <TestServiceHPI.h>
+#define nrOfMeas 50
 
+uint16_t outputVoltages[nrOfMeas];
 
 volatile bool DMADone = false;
 
@@ -15,7 +17,7 @@ extern DSerial serial;
 
 void DMA_INT1_IRQHandler(void)
 {
-    serial.println("DMA IRQ!");
+    //serial.println("DMA IRQ!");
     MAP_DMA_disableChannel(7);
     MAP_DMA_clearInterruptFlag(7);
 
@@ -58,10 +60,10 @@ void enableLowCShort(bool status){
 
 void enableHighCShort(bool status){
     if(!status){
-        serial.println("Disabling LowC!");
+        serial.println("Disabling HighCShort!");
         MAP_GPIO_setOutputHighOnPin( GPIO_PORT_P5, GPIO_PIN7 );
     }else{
-        serial.println("Enabling LowC!");
+        //serial.println("Enabling HighC Short!");
         MAP_GPIO_setOutputLowOnPin( GPIO_PORT_P5, GPIO_PIN7 );
     }
 }
@@ -122,6 +124,7 @@ TestServiceHPI::TestServiceHPI(){
     MAP_ADC14_enableConversion();
     //MAP_ADC14_toggleConversionTrigger();
     //![Single Sample Mode Configure]
+    MAP_CS_initClockSignal(CS_ACLK, CS_LFXTCLK_SELECT, CS_CLOCK_DIVIDER_4);
 
 
 }
@@ -144,7 +147,8 @@ bool TestServiceHPI::process(DataMessage &command, DataMessage &workingBuffer)
             uint16_t inputVoltage;
             uint16_t outputVoltage;
             Timer_A_ContinuousModeConfig  timerConfig;
-            uint16_t outputVoltages[50];
+            Timer_A_ContinuousModeConfig  slowtimerConfig;
+            //uint16_t outputVoltages[nrOfMeas+10];
 
             switch(command.getPayload()[2]) {
                 case TESTSERVICEHPI_LOWC_ENABLE:
@@ -156,6 +160,7 @@ bool TestServiceHPI::process(DataMessage &command, DataMessage &workingBuffer)
 
 
                     enableLowC(command.getPayload()[3] == 1);
+                    this->lowCStatus = (command.getPayload()[3] == 1);
                     //wait for voltage Settle
                     d = 0.05 * MAP_CS_getMCLK();
                     for(uint32_t k = 0; k < d;  k++)
@@ -190,76 +195,86 @@ bool TestServiceHPI::process(DataMessage &command, DataMessage &workingBuffer)
                     break;
 
                 case TESTSERVICEHPI_LOWC_TRIGGERSC:
-                    //uint8_t controlTable[256];
-                    //memset(outputVoltages, 0x0000, 20);
-                    //configure Timer
-                    timerConfig =
-                    {
-                            TIMER_A_CLOCKSOURCE_SMCLK,           // SMCLK Clock Source (48Mhz/4)
-                            TIMER_A_CLOCKSOURCE_DIVIDER_1,       // SMCLK/1 = 12MHz
-                            TIMER_A_TAIE_INTERRUPT_DISABLE,      // Disable Timer ISR
-                            TIMER_A_DO_CLEAR                     // Do Clear Counter
-                    };
-                    MAP_Timer_A_configureContinuousMode(TIMER_A0_BASE, &timerConfig);
+                    if(command.getPayload()[3] == 1 && lowCStatus == true){
+                        uint8_t controlTable[16];
+                        for(int j = 0; j < 16; j++){
+                            controlTable[j] = 0;
+                        }
+                        //configure Timer
+                        timerConfig =
+                        {
+                                TIMER_A_CLOCKSOURCE_SMCLK,           // SMCLK Clock Source (48Mhz/4)
+                                TIMER_A_CLOCKSOURCE_DIVIDER_1,       // SMCLK/1 = 12MHz
+                                TIMER_A_TAIE_INTERRUPT_DISABLE,      // Disable Timer ISR
+                                TIMER_A_DO_CLEAR                     // Do Clear Counter
+                        };
+                        slowtimerConfig =
+                        {
+                                TIMER_A_CLOCKSOURCE_ACLK,           //  ACLK Clock Source (32768 hz)
+                                TIMER_A_CLOCKSOURCE_DIVIDER_1,       // ACLK/2 = 16384
+                                TIMER_A_TAIE_INTERRUPT_DISABLE,      // Disable Timer ISR
+                                TIMER_A_DO_CLEAR                     // Do Clear Counter
+                        };
+                        MAP_Timer_A_configureContinuousMode(TIMER_A0_BASE, &timerConfig);
+                        MAP_Timer_A_configureContinuousMode(TIMER_A1_BASE, &slowtimerConfig);
 
+                        //reconfigure ADC
+                        MAP_ADC14_disableConversion();
+                        MAP_ADC14_clearInterruptFlag( MAP_ADC14_getEnabledInterruptStatus() );
+                        MAP_ADC14_configureSingleSampleMode(ADC_MEM1, true);
+                        MAP_ADC14_enableInterrupt(ADC_INT1);
+                        MAP_DMA_enableModule();
+                        MAP_DMA_setControlBase(controlTable);
+                        MAP_DMA_assignChannel(DMA_CH7_ADC14);
+                        MAP_DMA_setChannelControl(UDMA_PRI_SELECT | DMA_CH7_ADC14,
+                            UDMA_SIZE_16 | UDMA_SRC_INC_NONE | UDMA_DST_INC_16 | UDMA_ARB_1);
+                        MAP_DMA_setChannelTransfer(UDMA_PRI_SELECT | DMA_CH7_ADC14,
+                            UDMA_MODE_BASIC, (void*) &ADC14->MEM[1],
+                            outputVoltages, nrOfMeas);
+                        MAP_DMA_assignInterrupt(DMA_INT1, 7);
+                        MAP_DMA_registerInterrupt(DMA_INT1, DMA_INT1_IRQHandler);
+                        MAP_Interrupt_enableInterrupt(INT_DMA_INT1);
 
-                    //reconfigure ADC
-                    MAP_ADC14_disableConversion();
-                    MAP_ADC14_clearInterruptFlag( MAP_ADC14_getEnabledInterruptStatus() );
-                    MAP_ADC14_configureSingleSampleMode(ADC_MEM1, true);
-                    MAP_ADC14_enableInterrupt(ADC_INT1);
-//                    MAP_DMA_enableModule();
-//                    MAP_DMA_setControlBase(controlTable);
-//                    MAP_DMA_assignChannel(DMA_CH7_ADC14);
-//                    MAP_DMA_disableChannelAttribute(DMA_CH7_ADC14,
-//                                                  UDMA_ATTR_ALTSELECT | UDMA_ATTR_USEBURST |
-//                                                  UDMA_ATTR_HIGH_PRIORITY |
-//                                                  UDMA_ATTR_REQMASK);
-//                    MAP_DMA_enableChannelAttribute(DMA_CH7_ADC14, UDMA_ATTR_USEBURST);
-//                    MAP_DMA_setChannelControl(UDMA_PRI_SELECT | DMA_CH7_ADC14,
-//                        UDMA_SIZE_16 | UDMA_SRC_INC_NONE | UDMA_DST_INC_16 | UDMA_ARB_1);
-//                    MAP_DMA_setChannelTransfer(UDMA_PRI_SELECT | DMA_CH7_ADC14,
-//                        UDMA_MODE_PINGPONG, (void*) &ADC14->MEM[1],
-//                        outputVoltages, 10);
-//                    MAP_DMA_setChannelControl(UDMA_ALT_SELECT | DMA_CH7_ADC14,
-//                        UDMA_SIZE_16 | UDMA_SRC_INC_NONE | UDMA_DST_INC_16 | UDMA_ARB_1);
-//                    MAP_DMA_setChannelTransfer(UDMA_ALT_SELECT | DMA_CH7_ADC14,
-//                        UDMA_MODE_PINGPONG, (void*) &ADC14->MEM[1],
-//                        &outputVoltages[10], 10);
-//                    MAP_DMA_assignInterrupt(DMA_INT1, 7);
-//                    MAP_DMA_registerInterrupt(DMA_INT1, DMA_INT1_IRQHandler);
-//                    MAP_Interrupt_enableInterrupt(INT_DMA_INT1);
-//                    MAP_DMA_enableChannel(7);
-//                    MAP_Interrupt_enableMaster();
-                    MAP_ADC14_enableConversion();
+                        DMADone = false;
 
-                    MAP_Timer_A_startCounter(TIMER_A0_BASE, TIMER_A_CONTINUOUS_MODE);
-                    enableLowCShort(command.getPayload()[3] == 1);
-                    MAP_ADC14_toggleConversionTrigger();
-                    //while(!DMADone);
-                    //serial.println("DMA DONE!");
-                    if(command.getPayload()[3] == 1){
-                        for(int q = 0; q < 50; q++){
-                        //get Measurement
+                        MAP_DMA_enableChannel(7);
+                        MAP_ADC14_enableConversion();
+                        enableLowCShort(command.getPayload()[3] == 1);
+                        MAP_Timer_A_startCounter(TIMER_A0_BASE, TIMER_A_CONTINUOUS_MODE);
+                        MAP_Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_CONTINUOUS_MODE);
+                        MAP_ADC14_toggleConversionTrigger();
+
+                        while(!DMADone);
+                        //serial.println("DMA DONE!");
+
+                        uint16_t measTime = MAP_Timer_A_getCounterValue(TIMER_A0_BASE);
+                        measTime = measTime/(MAP_CS_getSMCLK()/1000000); //12 Mhz clock -> time in us
+
+                        bool retryDetected = false;
+                        uint16_t tmpV = 0;
+                        uint16_t retryTime = 0;
+                        while(!retryDetected){
                             while(!(ADC_INT1 & status)){
-                                //serial.print("waiting!");
                                 status = MAP_ADC14_getEnabledInterruptStatus();
                             }
-                            outputVoltages[q] = MAP_ADC14_getResult(ADC_MEM1);
-                            //outputVoltages[q] = outputVoltage[q] * 5000 / 16384;
-
+                            retryTime = MAP_Timer_A_getCounterValue(TIMER_A1_BASE);
+                            tmpV = MAP_ADC14_getResult(ADC_MEM1) * 5000 / 16384;
+                            if(tmpV > 2500){
+                                retryDetected = true;
+                                MAP_Timer_A_stopTimer(TIMER_A1_BASE);
+                            }else if(retryTime /(MAP_CS_getACLK()/1000) > 5000){
+                                serial.print("RETRY TOOK TOO LONG!");
+                                retryTime = 0;
+                                retryDetected = true;
+                                MAP_Timer_A_stopTimer(TIMER_A1_BASE);
+                            }
                             MAP_ADC14_clearInterruptFlag(status);
                             status = MAP_ADC14_getEnabledInterruptStatus();
-//                            MAP_ADC14_toggleConversionTrigger();
-//                            serial.print("  |  OUTPUT: ");
-//                            serial.print(outputVoltage, DEC);
-//                            serial.println();
-                            }
-                        //timer off
-                        uint16_t curTime = MAP_Timer_A_getCounterValue(TIMER_A0_BASE);
-                        //MAP_Timer_A_stopTimer(TIMER_A0_BASE);
+                        }
 
-                        for(int q = 0; q < 50; q++){
+                        retryTime = retryTime /(MAP_CS_getACLK()/1000); //16.384 kHz -> ms
+
+                        for(int q = 0; q < nrOfMeas; q++){
                             outputVoltages[q] = outputVoltages[q] * 5000 / 16384;
                             serial.print("ShortCircuit OUTPUT: ");
                             serial.print(outputVoltages[q], DEC);
@@ -267,39 +282,19 @@ bool TestServiceHPI::process(DataMessage &command, DataMessage &workingBuffer)
                             workingBuffer.getPayload()[2+2*q] = (uint8_t) ((outputVoltages[q] & 0xFF00) >> 8);
                             workingBuffer.getPayload()[2+2*q+1] = (uint8_t) (outputVoltages[q] & 0x00FF);
                         }
-//                        serial.print("MCLK Speed: ");
-//                        serial.println(MAP_CS_getMCLK(), DEC);
-//                        serial.print("SMCLK Speed: ");
-//                        serial.println(MAP_CS_getSMCLK(), DEC);
-                        curTime = curTime/(MAP_CS_getSMCLK()/1000000);
                         serial.print("time of measurements: ");
-                        serial.println(curTime, DEC);
-                        workingBuffer.getPayload()[2+2*50] = (uint8_t) ((curTime & 0xFF00) >> 8);
-                        workingBuffer.getPayload()[2+2*50+1] = (uint8_t) (curTime & 0x00FF);
+                        serial.print(measTime, DEC);
+                        serial.println(" us");
+                        workingBuffer.getPayload()[2+2*50] = (uint8_t) ((measTime & 0xFF00) >> 8);
+                        workingBuffer.getPayload()[2+2*50+1] = (uint8_t) (measTime & 0x00FF);
                         workingBuffer.setSize(2*50+4);
-
-                        bool retryDetected = false;
-                        uint16_t tmpV = 0;
-                        while(!retryDetected){
-                            while(!(ADC_INT1 & status)){
-                                status = MAP_ADC14_getEnabledInterruptStatus();
-                            }
-                            tmpV = MAP_ADC14_getResult(ADC_MEM1) * 5000 / 16384;
-                            if(tmpV > 2500){
-                                retryDetected = true;
-                            }
-                            MAP_ADC14_clearInterruptFlag(status);
-                            status = MAP_ADC14_getEnabledInterruptStatus();
-                        }
-                        uint16_t retryTime = MAP_Timer_A_getCounterValue(TIMER_A0_BASE);
-                        MAP_Timer_A_stopTimer(TIMER_A0_BASE);
-
-                        retryTime = retryTime/(MAP_CS_getSMCLK()/1000000);
-
                         serial.println("Retry Detected!");
                         serial.print("Retry Time: ");
-                        serial.println(retryTime, DEC);
+                        serial.print(retryTime, DEC);
+                        serial.println(" ms");
                         enableLowCShort(false);
+                    }else{
+                        serial.println("Short is automatically turned off and Bus needs to be turned on first.");
                     }
                     break;
                 case TESTSERVICEHPI_HIGHC_ENABLE:
@@ -311,6 +306,7 @@ bool TestServiceHPI::process(DataMessage &command, DataMessage &workingBuffer)
 
 
                     enableHighC(command.getPayload()[3] == 1);
+                    this->highCStatus = (command.getPayload()[3] == 1);
                     //wait for voltage Settle
                     d = 0.05 * MAP_CS_getMCLK();
                     for(uint32_t k = 0; k < d;  k++)
@@ -344,54 +340,107 @@ bool TestServiceHPI::process(DataMessage &command, DataMessage &workingBuffer)
                     workingBuffer.setSize(6);
                     break;
                 case TESTSERVICEHPI_HIGHC_TRIGGERSC:
-                    timerConfig =
-                    {
-                            TIMER_A_CLOCKSOURCE_SMCLK,           // SMCLK Clock Source (48Mhz/4)
-                            TIMER_A_CLOCKSOURCE_DIVIDER_1,       // SMCLK/1 = 12MHz
-                            TIMER_A_TAIE_INTERRUPT_DISABLE,      // Disable Timer ISR
-                            TIMER_A_DO_CLEAR                     // Do Clear Counter
-                    };
-                    MAP_Timer_A_configureContinuousMode(TIMER_A0_BASE, &timerConfig);
+                    if(command.getPayload()[3] == 1 && highCStatus == true){
+                        uint8_t controlTable[16];
+                        for(int j = 0; j < 16; j++){
+                            controlTable[j] = 0;
+                        }
+                        //configure Timer
+                        timerConfig =
+                        {
+                                TIMER_A_CLOCKSOURCE_SMCLK,           // SMCLK Clock Source (48Mhz/4)
+                                TIMER_A_CLOCKSOURCE_DIVIDER_1,       // SMCLK/1 = 12MHz
+                                TIMER_A_TAIE_INTERRUPT_DISABLE,      // Disable Timer ISR
+                                TIMER_A_DO_CLEAR                     // Do Clear Counter
+                        };
+                        slowtimerConfig =
+                        {
+                                TIMER_A_CLOCKSOURCE_ACLK,           //  ACLK Clock Source (32768 hz)
+                                TIMER_A_CLOCKSOURCE_DIVIDER_1,       // ACLK/2 = 16384
+                                TIMER_A_TAIE_INTERRUPT_DISABLE,      // Disable Timer ISR
+                                TIMER_A_DO_CLEAR                     // Do Clear Counter
+                        };
+                        MAP_Timer_A_configureContinuousMode(TIMER_A0_BASE, &timerConfig);
+                        MAP_Timer_A_configureContinuousMode(TIMER_A1_BASE, &slowtimerConfig);
 
+                        //reconfigure ADC
+                        MAP_ADC14_disableConversion();
+                        MAP_ADC14_clearInterruptFlag( MAP_ADC14_getEnabledInterruptStatus() );
+                        MAP_ADC14_configureSingleSampleMode(ADC_MEM3, true);
+                        MAP_ADC14_enableInterrupt(ADC_INT3);
+                        MAP_DMA_enableModule();
+                        MAP_DMA_setControlBase(controlTable);
+                        MAP_DMA_assignChannel(DMA_CH7_ADC14);
+                        MAP_DMA_setChannelControl(UDMA_PRI_SELECT | DMA_CH7_ADC14,
+                            UDMA_SIZE_16 | UDMA_SRC_INC_NONE | UDMA_DST_INC_16 | UDMA_ARB_1);
+                        MAP_DMA_setChannelTransfer(UDMA_PRI_SELECT | DMA_CH7_ADC14,
+                            UDMA_MODE_BASIC, (void*) &ADC14->MEM[3],
+                            outputVoltages, nrOfMeas);
+                        MAP_DMA_assignInterrupt(DMA_INT1, 7);
+                        MAP_DMA_registerInterrupt(DMA_INT1, DMA_INT1_IRQHandler);
+                        MAP_Interrupt_enableInterrupt(INT_DMA_INT1);
 
-                    //reconfigure ADC
-                    MAP_ADC14_disableConversion();
-                    MAP_ADC14_clearInterruptFlag( MAP_ADC14_getEnabledInterruptStatus() );
-                    MAP_ADC14_configureSingleSampleMode(ADC_MEM3, true);
-                    MAP_ADC14_enableInterrupt(ADC_INT3);
-                    MAP_ADC14_enableConversion();
+                        DMADone = false;
 
-                    MAP_Timer_A_startCounter(TIMER_A0_BASE, TIMER_A_CONTINUOUS_MODE);
-                    enableHighCShort(command.getPayload()[3] == 1);
-                    MAP_ADC14_toggleConversionTrigger();
-                    if(command.getPayload()[3] == 1){
-                        for(int q = 0; q < 50; q++){
-                        //get Measurement
+                        MAP_DMA_enableChannel(7);
+                        MAP_ADC14_enableConversion();
+                        enableHighCShort(command.getPayload()[3] == 1);
+                        MAP_Timer_A_startCounter(TIMER_A0_BASE, TIMER_A_CONTINUOUS_MODE);
+                        MAP_Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_CONTINUOUS_MODE);
+                        MAP_ADC14_toggleConversionTrigger();
+
+                        while(!DMADone);
+                        //serial.println("DMA DONE!");
+
+                        uint16_t measTime = MAP_Timer_A_getCounterValue(TIMER_A0_BASE);
+                        measTime = measTime/(MAP_CS_getSMCLK()/1000000); //12 Mhz clock -> time in us
+
+                        bool retryDetected = false;
+                        uint16_t tmpV = 0;
+                        uint16_t retryTime = 0;
+                        while(!retryDetected){
                             while(!(ADC_INT3 & status)){
                                 status = MAP_ADC14_getEnabledInterruptStatus();
                             }
-                            outputVoltages[q] = MAP_ADC14_getResult(ADC_MEM3);
-
+                            retryTime = MAP_Timer_A_getCounterValue(TIMER_A1_BASE);
+                            tmpV = MAP_ADC14_getResult(ADC_MEM3) * 5000 / 16384;
+                            if(tmpV > 2500){
+                                retryDetected = true;
+                                MAP_Timer_A_stopTimer(TIMER_A1_BASE);
+                            }else if(retryTime /(MAP_CS_getACLK()/1000) > 5000){
+                                serial.println("RETRY TOOK TOO LONG!");
+                                retryTime = 0;
+                                retryDetected = true;
+                                MAP_Timer_A_stopTimer(TIMER_A1_BASE);
+                            }
                             MAP_ADC14_clearInterruptFlag(status);
                             status = MAP_ADC14_getEnabledInterruptStatus();
-                            }
-                        //timer off
-                        uint16_t curTime = MAP_Timer_A_getCounterValue(TIMER_A0_BASE);
-                        MAP_Timer_A_stopTimer(TIMER_A0_BASE);
-                        for(int q = 0; q < 50; q++){
+                        }
+
+                        retryTime = retryTime /(MAP_CS_getACLK()/1000); //16.384 kHz -> ms
+
+
+                        for(int q = 0; q < nrOfMeas; q++){
                             outputVoltages[q] = outputVoltages[q] * 5000 / 16384;
                             serial.print("ShortCircuit OUTPUT: ");
                             serial.print(outputVoltages[q], DEC);
                             serial.println();
                             workingBuffer.getPayload()[2+2*q] = (uint8_t) ((outputVoltages[q] & 0xFF00) >> 8);
-                            workingBuffer.getPayload()[2+2*q+1] = (uint8_t) (outputVoltages[q] & 0xFF);
+                            workingBuffer.getPayload()[2+2*q+1] = (uint8_t) (outputVoltages[q] & 0x00FF);
                         }
-                        curTime = curTime/(MAP_CS_getSMCLK()/1000000);
                         serial.print("time of measurements: ");
-                        serial.println(curTime, DEC);
-                        workingBuffer.getPayload()[2+2*50] = (uint8_t) ((curTime & 0xFF00) >> 8);
-                        workingBuffer.getPayload()[2+2*50+1] = (uint8_t) (curTime & 0x00FF);
+                        serial.print(measTime, DEC);
+                        serial.println(" us");
+                        workingBuffer.getPayload()[2+2*50] = (uint8_t) ((measTime & 0xFF00) >> 8);
+                        workingBuffer.getPayload()[2+2*50+1] = (uint8_t) (measTime & 0x00FF);
                         workingBuffer.setSize(2*50+4);
+                        serial.println("Retry Detected!");
+                        serial.print("Retry Time: ");
+                        serial.print(retryTime, DEC);
+                        serial.println(" ms");
+                        enableHighCShort(false);
+                    }else{
+                        serial.println("Short is automatically turned off and Bus needs to be turned on first.");
                     }
                     break;
             }

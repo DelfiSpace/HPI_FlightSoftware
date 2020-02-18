@@ -20,6 +20,10 @@
 
 class TestServiceHPI: public Service
 {
+private:
+    lowCStatus = false;
+    highCStatus = false;
+
  public:
     TestServiceHPI();
      virtual bool process( DataMessage &command, DataMessage &workingBbuffer );
