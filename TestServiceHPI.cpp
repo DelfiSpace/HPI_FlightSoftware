@@ -404,7 +404,7 @@ bool TestServiceHPI::process(DataMessage &command, DataMessage &workingBuffer)
                             }
                             retryTime = MAP_Timer_A_getCounterValue(TIMER_A1_BASE);
                             tmpV = MAP_ADC14_getResult(ADC_MEM3) * 5000 / 16384;
-                            if(tmpV > 2500){
+                            if(tmpV > 50){
                                 retryDetected = true;
                                 MAP_Timer_A_stopTimer(TIMER_A1_BASE);
                             }else if(retryTime /(MAP_CS_getACLK()/1000) > 5000){
