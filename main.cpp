@@ -24,9 +24,9 @@ Service* services[] = { &ping, &reset };
 
 // HPI board tasks
 CommandHandler<PQ9Frame> cmdHandler(rs485, services, 2);
-Task timerTask(periodicTask);
-Task* periodicTasks[] = {&timerTask};
-PeriodicTaskNotifier periodicNotifier = PeriodicTaskNotifier(FCLOCK, periodicTasks, 1);
+PeriodicTask timerTask(10, periodicTask);
+PeriodicTask* periodicTasks[] = {&timerTask};
+PeriodicTaskNotifier taskNotifier = PeriodicTaskNotifier(periodicTasks, 1);
 Task* tasks[] = { &timerTask, &cmdHandler };
 
 // used to forward PQ9Frames
