@@ -7,7 +7,6 @@
 
 #include <RS485.h>
 
-extern DSerial serial;
 
 volatile unsigned char state = 0;
 unsigned short size = 0;

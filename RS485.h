@@ -11,7 +11,6 @@
 #include "DataBus.h"
 #include <driverlib.h>
 #include "PQ9Frame.h"
-#include "DSerial.h"
 
 // Device specific includes
 #include "inc/msp432p401r.h"
