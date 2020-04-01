@@ -4,9 +4,6 @@
 PQ9Bus pq9bus(1, GPIO_PORT_P2, GPIO_PIN1);
 RS485 rs485(3, GPIO_PORT_P9, GPIO_PIN0);
 
-// debug console handler
-DSerial serial;
-
 // I2C bus
 DWire i2c(0);
 TMP100 tempSensor(i2c, 0x48);
@@ -152,7 +149,7 @@ void main(void)
     spi.initMaster(DSPI::MODE0, DSPI::MSBFirst, 1000000);
     fram.init();
 
-    serial.begin( );                                // baud rate: 9600 bps
+    Console::init( 115200 );                              // baud rate: 9600 bps
     pq9bus.begin(115200, HPI_ADDRESS);              // baud rate: 115200 bps
                                                     // address 100
 
@@ -176,7 +173,7 @@ void main(void)
     //cmdHandler.onValidCommand([]{ reset.kickInternalWatchDog(); });
     cmdHandler.onValidCommand(validRS485Cmd);
 
-    serial.println("HPI booting...");
+    Console::log("HPI booting...");
 
     // ping request
     pingCmd.setDestination(2);
