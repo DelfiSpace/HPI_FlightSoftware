@@ -13,6 +13,9 @@ INA226 powerBus(i2c, 0x40);
 DSPI spi(3);
 MB85RS fram(spi, GPIO_PORT_P1, GPIO_PIN0 );
 
+// HardwareMonitor
+HWMonitor hwMonitor(&fram);
+
 // services running in the system
 PingService ping;
 ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
@@ -139,6 +142,11 @@ void main(void)
     // - clock tree
     DelfiPQcore::initMCU();
 
+    // initialize the ADC
+    // - ADC14 and FPU Module
+    // - MEM0 for internal temperature measurements
+    ADCManager::initADC();
+
     // init I2c bus and I2C devices
     i2c.setFastMode();
     i2c.begin();
@@ -161,6 +169,9 @@ void main(void)
     // - prepare the pin for power cycling the system
     reset.init();
 
+    // initialize HWMonitor readings
+    hwMonitor.readResetStatus();
+    hwMonitor.readCSStatus();
 
     // link the command handler to the PQ9 bus:
     // every time a new command is received, it will be forwarded to the command handler

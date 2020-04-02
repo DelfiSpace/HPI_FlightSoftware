@@ -28,6 +28,8 @@
 #include "PingService.h"
 #include "ResetService.h"
 #include "PeriodicTaskNotifier.h"
+#include "HWMonitor.h"
+#include "ADCManager.h"
 
 #define FCLOCK                  48000000
 #define HPI_ADDRESS             100
