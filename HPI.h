@@ -15,6 +15,7 @@
 #include "PQ9Bus.h"
 #include "RS485.h"
 #include "PQ9Frame.h"
+#include "PQ9Message.h"
 #include "DWire.h"
 #include "TMP100.h"
 #include "INA226.h"

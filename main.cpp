@@ -23,7 +23,7 @@ ResetService reset( GPIO_PORT_P4, GPIO_PIN0 );
 Service* services[] = { &ping, &reset };
 
 // HPI board tasks
-CommandHandler<PQ9Frame> cmdHandler(rs485, services, 2);
+CommandHandler<PQ9Frame,PQ9Message> cmdHandler(rs485, services, 2);
 PeriodicTask timerTask(1000, periodicTask);
 PeriodicTask* periodicTasks[] = {&timerTask};
 PeriodicTaskNotifier taskNotifier = PeriodicTaskNotifier(periodicTasks, 1);
